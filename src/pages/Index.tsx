@@ -21,6 +21,83 @@ const Index = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [promoCode, setPromoCode] = useState("");
   const [isAnimating, setIsAnimating] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [leaderboard, setLeaderboard] = useState([
+    { rank: 1, name: "Player1", coins: 50000 },
+    { rank: 2, name: "Player2", coins: 35000 },
+    { rank: 3, name: "Player3", coins: 28000 },
+  ]);
+
+  // Загрузка данных из localStorage при инициализации
+  useEffect(() => {
+    const savedData = localStorage.getItem("kosyakCoinData");
+    const savedLeaderboard = localStorage.getItem("kosyakCoinLeaderboard");
+
+    if (savedLeaderboard) {
+      setLeaderboard(JSON.parse(savedLeaderboard));
+    }
+
+    if (savedData) {
+      const data = JSON.parse(savedData);
+      setCoins(data.coins || 0);
+      setClickPower(data.clickPower || 1);
+      setClickLimit(data.clickLimit || 250);
+      setClicksLeft(data.clicksLeft || 250);
+      setUpgradePrice(data.upgradePrice || 100);
+      setLimitPrice(data.limitPrice || 500);
+      setUsername(data.username || "");
+      setIsAdmin(data.isAdmin || false);
+
+      if (data.username) {
+        setIsLoggedIn(true);
+      }
+    }
+  }, []);
+
+  // Сохранение данных в localStorage при изменении
+  useEffect(() => {
+    if (isLoggedIn && username) {
+      const dataToSave = {
+        coins,
+        clickPower,
+        clickLimit,
+        clicksLeft,
+        upgradePrice,
+        limitPrice,
+        username,
+        isAdmin,
+      };
+      localStorage.setItem("kosyakCoinData", JSON.stringify(dataToSave));
+
+      // Обновление рейтинга
+      updateLeaderboard();
+    }
+  }, [
+    coins,
+    clickPower,
+    clickLimit,
+    clicksLeft,
+    upgradePrice,
+    limitPrice,
+    username,
+    isAdmin,
+    isLoggedIn,
+  ]);
+
+  // Функция обновления рейтинга
+  const updateLeaderboard = () => {
+    setLeaderboard((prev) => {
+      const updated = prev.filter((player) => player.name !== username);
+      updated.push({ rank: 0, name: username, coins });
+      updated.sort((a, b) => b.coins - a.coins);
+      updated.forEach((player, index) => {
+        player.rank = index + 1;
+      });
+
+      localStorage.setItem("kosyakCoinLeaderboard", JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const handleCoinClick = () => {
     if (clicksLeft > 0) {
@@ -33,7 +110,30 @@ const Index = () => {
 
   const handleLogin = () => {
     if (username && password) {
-      setIsLoggedIn(true);
+      // Проверяем уникальность ника
+      const existingUsers = JSON.parse(
+        localStorage.getItem("kosyakCoinUsers") || "[]",
+      );
+      const userExists = existingUsers.find(
+        (user) => user.username === username,
+      );
+
+      if (userExists) {
+        // Проверяем пароль
+        if (userExists.password === password) {
+          setIsLoggedIn(true);
+          setLoginError("");
+        } else {
+          setLoginError("Неверный пароль!");
+        }
+      } else {
+        // Регистрируем нового пользователя
+        const newUser = { username, password };
+        existingUsers.push(newUser);
+        localStorage.setItem("kosyakCoinUsers", JSON.stringify(existingUsers));
+        setIsLoggedIn(true);
+        setLoginError("");
+      }
     }
   };
 
@@ -71,12 +171,6 @@ const Index = () => {
     return () => clearInterval(timer);
   }, [clickLimit]);
 
-  const leaderboard = [
-    { rank: 1, name: "Player1", coins: 50000 },
-    { rank: 2, name: "Player2", coins: 35000 },
-    { rank: 3, name: "Player3", coins: 28000 },
-  ];
-
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-game-blue via-game-orange to-game-gold flex items-center justify-center p-4">
@@ -107,6 +201,11 @@ const Index = () => {
                 placeholder="Введите пароль"
               />
             </div>
+            {loginError && (
+              <div className="text-red-600 text-sm text-center">
+                {loginError}
+              </div>
+            )}
             <Button
               onClick={handleLogin}
               className="w-full bg-game-orange hover:bg-game-orange/90"
@@ -114,6 +213,9 @@ const Index = () => {
             >
               Войти
             </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Введите любой ник и пароль для регистрации
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -256,7 +358,11 @@ const Index = () => {
                   {leaderboard.map((player) => (
                     <div
                       key={player.rank}
-                      className="flex items-center justify-between p-3 bg-muted rounded-lg"
+                      className={`flex items-center justify-between p-3 rounded-lg ${
+                        player.name === username
+                          ? "bg-game-orange/20 border-2 border-game-orange"
+                          : "bg-muted"
+                      }`}
                     >
                       <div className="flex items-center space-x-3">
                         <Badge
@@ -264,7 +370,15 @@ const Index = () => {
                         >
                           #{player.rank}
                         </Badge>
-                        <span className="font-medium">{player.name}</span>
+                        <span
+                          className={`font-medium ${
+                            player.name === username
+                              ? "text-game-orange font-bold"
+                              : ""
+                          }`}
+                        >
+                          {player.name} {player.name === username && "(Вы)"}
+                        </span>
                       </div>
                       <Badge className="bg-game-gold text-game-dark">
                         {player.coins.toLocaleString()} койнов
